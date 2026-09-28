@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+@theme {
+    --font-sans: 'Be Vietnam Pro', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+    --color-espresso: #3d2e20;
+    --color-espresso-line: #5a4633;
+    --color-latte: #8b6f47;
+    --color-latte-dark: #765d3b;
+    --color-cream: #f0dfc4;
+    --color-caramel: #e0bd8c;
+    --color-foam: #e8cfa9;
+    --color-paper: #f9f8f6;
+    --color-ink: #1f1a17;
+}
+
+/* Hide Alpine-driven elements until Alpine has started. */
+[x-cloak] {
+    display: none !important;
+}
+
+/* A ticket that just arrived on the kitchen board (realtime) blinks a few times. */
+@keyframes live-flash {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgb(245 158 11 / 0);
+    }
+    50% {
+        box-shadow: 0 0 0 6px rgb(245 158 11 / 0.55);
+    }
+}
+
+.live-flash {
+    animation: live-flash 1s ease-in-out 6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .live-flash {
+        animation: none;
+        outline: 3px solid rgb(245 158 11);
+    }
+}
