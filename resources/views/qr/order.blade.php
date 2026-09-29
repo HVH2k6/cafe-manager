@@ -148,7 +148,7 @@
                 <div id="payment" class="mt-4 flex items-center justify-between gap-3 rounded-xl bg-stone-100 px-4 py-3 text-sm">
                     @if ($order->payment)
                         <span class="text-stone-600">Thanh toán: {{ $order->payment->method->label() }}</span>
-                        <span class="flex items-center gap-1 font-semibold text-emerald-700"><x-icon name="check-circle" class="size-4" /> Đã thanh toán</span>
+                        <a href="{{ \App\Http\Controllers\ReceiptController::publicUrl($order) }}" class="flex items-center gap-1 font-semibold text-emerald-700 hover:underline"><x-icon name="check-circle" class="size-4" /> Đã thanh toán · Hóa đơn</a>
                     @else
                         <span class="text-stone-600">Thanh toán: {{ $preference?->forCustomers()[0] ?? 'Tại quầy' }}</span>
                         <span class="font-semibold text-latte-dark">{{ $paysOnline ? 'Quét VietQR' : 'Thu tại bàn' }}</span>
@@ -209,9 +209,14 @@
                     <x-icon name="concierge-bell" class="size-5" /> Gọi nhân viên
                 </button>
             </form>
-            <a href="{{ route('qr.menu', $session) }}" class="flex h-13 items-center justify-center rounded-xl bg-latte text-lg font-semibold text-white hover:bg-latte-dark">
-                {{ $canOrderMore ? 'Gọi thêm món' : 'Quay lại Menu' }}
-            </a>
+            @if ($order->status->isOpen())
+                <a href="{{ route('qr.menu', $session) }}" class="flex h-13 items-center justify-center rounded-xl bg-latte text-lg font-semibold text-white hover:bg-latte-dark">
+                    {{ $canOrderMore ? 'Gọi thêm món' : 'Quay lại Menu' }}
+                </a>
+            @else
+                {{-- The session is closed: a new order starts from the table's QR page. --}}
+                <a href="{{ route('qr.show', $session->qr_token) }}" class="flex h-13 items-center justify-center rounded-xl bg-latte text-lg font-semibold text-white hover:bg-latte-dark">Gọi món mới</a>
+            @endif
         </footer>
     </div>
 </x-layouts.customer>

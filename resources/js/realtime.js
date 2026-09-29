@@ -52,20 +52,85 @@ export function registerRealtime(Alpine) {
         Alpine.store('realtime').state = current;
     });
 
-    // Orders waiting for confirmation (sidebar badge); it bounces for a moment when it goes up.
-    Alpine.store('orders', {
-        pending: Number(document.body.dataset.pendingOrders ?? 0),
-        bumped: false,
-        setPending(count) {
-            if (count > this.pending) {
-                this.bumped = true;
+    /*
+     * Sidebar counts (pending orders, kitchen items, tables to clean, low stock).
+     * The server renders them in <body data-badges>; after an event on a channel
+     * the user may listen to they are fetched again from /sidebar-badges, and
+     * polled as well (stock changes by hand have no event). A badge that goes up bounces.
+     */
+    const badgeSettings = JSON.parse(document.body.dataset.badgeSettings ?? '{}');
+
+    Alpine.store('badges', {
+        counts: JSON.parse(document.body.dataset.badges ?? '{}'),
+        bumped: {},
+        debounce: null,
+
+        count(key) {
+            return this.counts[key] ?? 0;
+        },
+
+        set(key, value) {
+            if (value > this.count(key)) {
+                this.bumped[key] = true;
                 setTimeout(() => {
-                    this.bumped = false;
+                    this.bumped[key] = false;
                 }, 2000);
             }
 
-            this.pending = count;
+            this.counts[key] = value;
         },
+
+        refreshSoon() {
+            clearTimeout(this.debounce);
+            this.debounce = setTimeout(() => this.refresh(), 400);
+        },
+
+        async refresh() {
+            if (! badgeSettings.url || document.hidden) {
+                return;
+            }
+
+            try {
+                const response = await fetch(badgeSettings.url, { headers: { Accept: 'application/json' } });
+
+                if (response.ok && ! response.redirected) {
+                    Object.entries(await response.json()).forEach(([key, value]) => this.set(key, value));
+                }
+            } catch {
+                // The next event or poll corrects the badges.
+            }
+        },
+    });
+
+    const BADGE_EVENTS = {
+        orders: ['order.created', 'order.status.updated', 'order.completed'],
+        kitchen: ['order.created', 'order.status.updated', 'order.completed'],
+        tables: ['table.updated'],
+    };
+
+    // One channel is enough to hear order changes: kitchen staff without orders.view listen to `kitchen`.
+    (badgeSettings.channels ?? [])
+        .filter((name) => name !== 'kitchen' || ! badgeSettings.channels.includes('orders'))
+        .forEach((name) => {
+            const channel = window.Echo?.private(name);
+            BADGE_EVENTS[name]?.forEach((event) => channel?.listen(`.${event}`, () => Alpine.store('badges').refreshSoon()));
+        });
+
+    let badgeTimer = null;
+    const scheduleBadgePoll = () => {
+        clearInterval(badgeTimer);
+
+        if (badgeSettings.url) {
+            badgeTimer = setInterval(() => Alpine.store('badges').refresh(), (Alpine.store('realtime').connected ? 120 : 30) * 1000);
+        }
+    };
+
+    pusher?.connection.bind('state_change', scheduleBadgePoll);
+    scheduleBadgePoll();
+    document.addEventListener('visibilitychange', () => {
+        if (! document.hidden) {
+            Alpine.store('badges').refresh();
+        }
     });
 
     /*
@@ -132,7 +197,9 @@ export function registerRealtime(Alpine) {
 
         init() {
             // Customers' QR pages have no login: their channel is public (its name holds the secret session token).
-            const channel = options.public ? window.Echo?.channel(options.channel) : window.Echo?.private(options.channel);
+            // No channel (the user may not listen to any): the region only polls.
+            const channel = ! options.channel ? null
+                : (options.public ? window.Echo?.channel(options.channel) : window.Echo?.private(options.channel));
 
             (options.events ?? []).forEach((name) => {
                 channel?.listen(`.${name}`, (payload) => this.handle(name, payload));
@@ -156,7 +223,9 @@ export function registerRealtime(Alpine) {
         },
 
         destroy() {
-            window.Echo?.leave(options.channel);
+            if (options.channel) {
+                window.Echo?.leave(options.channel);
+            }
             clearInterval(this.timer);
         },
 
@@ -280,7 +349,8 @@ export function registerRealtime(Alpine) {
                 return;
             }
 
-            const connected = Alpine.store('realtime').connected;
+            // Without a channel no event ever arrives, so the WebSocket being up changes nothing.
+            const connected = Boolean(options.channel) && Alpine.store('realtime').connected;
 
             if (connected && options.pollWhenConnected === false) {
                 return;
@@ -378,7 +448,7 @@ export function registerRealtime(Alpine) {
 
                 const { calls, pending, ready, pending_count: pendingCount } = await response.json();
 
-                Alpine.store('orders').setPending(pendingCount);
+                Alpine.store('badges').set('pending', pendingCount);
 
                 // Items the kitchen finished since the last poll (the first answer only records them).
                 if (this.knownReady !== null) {
@@ -418,16 +488,8 @@ export function registerRealtime(Alpine) {
             }
         },
 
-        async recount() {
-            try {
-                const response = await fetch(pollUrl, { headers: { Accept: 'application/json' } });
-
-                if (response.ok && ! response.redirected) {
-                    Alpine.store('orders').setPending((await response.json()).pending_count);
-                }
-            } catch {
-                // The next event or poll corrects the badge.
-            }
+        recount() {
+            Alpine.store('badges').refreshSoon();
         },
 
         ready(id, message, url) {

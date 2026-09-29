@@ -6,8 +6,8 @@ use App\Models\Order;
 use Illuminate\Broadcasting\Channel;
 
 /**
- * An order changed. `change` says what: its status, its items (added / removed)
- * or its payment — the last two can leave the status as it was.
+ * An order changed. `change` says what: its status, its items (added / removed),
+ * its payment or its discount — all but the first can leave the status as it was.
  */
 class OrderStatusUpdated extends OrderBroadcast
 {
@@ -15,7 +15,19 @@ class OrderStatusUpdated extends OrderBroadcast
 
     public const CHANGE_ITEMS = 'items';
 
+    /** Payment recorded or refunded, payOS QR code created or cancelled. */
     public const CHANGE_PAYMENT = 'payment';
+
+    /** Discount changed, so the total did. */
+    public const CHANGE_DISCOUNT = 'discount';
+
+    /**
+     * Something other than the status changed: tell the pages showing the order.
+     */
+    public static function changed(Order $order, string $change): void
+    {
+        static::send($order, $order->status->value, $order->status->value, $change);
+    }
 
     public function __construct(
         Order $order,

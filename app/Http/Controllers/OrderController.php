@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Actions\Orders\LoadMenu;
 use App\Actions\Orders\PlaceOrder;
+use App\Events\OrderStatusUpdated;
 use App\Http\Requests\StoreOrderRequest;
 use App\Models\DiningTable;
 use App\Models\Order;
 use App\OrderStatus;
 use App\Services\PayOSService;
+use App\Support\ActivityLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -130,6 +132,12 @@ class OrderController extends Controller
         $order->discount_amount = $validated['discount_amount'];
         $order->discount_reason = (float) $validated['discount_amount'] > 0 ? $validated['discount_reason'] : null;
         $order->recalculateTotals();
+
+        ActivityLogger::changed('order.discounted', "Giảm giá đơn {$order->order_number}: ".number_format((float) $order->discount_amount, 0, ',', '.').' đ'
+            .($order->discount_reason ? " ({$order->discount_reason})" : ''), $order, ['discount_amount', 'discount_reason', 'total_amount']);
+
+        // The total changed: other cashiers, the customer's QR page and the reports must see it.
+        OrderStatusUpdated::changed($order, OrderStatusUpdated::CHANGE_DISCOUNT);
 
         return back()->with('status', 'Đã cập nhật giảm giá.');
     }

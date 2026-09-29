@@ -3,6 +3,7 @@
 namespace App\Actions\Payments;
 
 use App\Actions\Orders\RecordPayment;
+use App\Events\OrderStatusUpdated;
 use App\Exceptions\PayOSException;
 use App\Models\PayosPaymentLink;
 use App\Models\User;
@@ -93,6 +94,11 @@ class SyncPayosPaymentLink
             }
 
             $link->save();
+
+            // Expired or cancelled on payOS' side: the order is unlocked, other screens must know.
+            if ($link->wasChanged('status') && $link->isFinal()) {
+                OrderStatusUpdated::changed($link->order, OrderStatusUpdated::CHANGE_PAYMENT);
+            }
 
             return $link;
         }

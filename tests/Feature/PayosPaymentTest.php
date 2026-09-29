@@ -1,5 +1,6 @@
 <?php
 
+use App\Events\OrderStatusUpdated;
 use App\Models\Order;
 use App\Models\PayosPaymentLink;
 use App\Models\Product;
@@ -9,6 +10,7 @@ use App\PaymentMethod;
 use App\Services\PayOSService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -183,6 +185,37 @@ describe('creating a QR code', function () {
         $this->actingAs(owner())
             ->post(route('orders.items.store', $order), ['items' => [productLine(Product::factory()->create())]])
             ->assertSessionHasErrors(['items' => "Đơn {$order->order_number} đang chờ khách chuyển khoản. Hãy hủy mã QR trước khi sửa đơn."]);
+    });
+
+    test('creating and cancelling a QR code is broadcast so other screens lock and unlock the order', function () {
+        Http::fake([
+            PAYOS_URL.'/*/cancel' => Http::response(['code' => '00', 'data' => ['status' => 'CANCELLED']]),
+            PAYOS_URL.'/*' => Http::response(paymentInfoResponse('CANCELLED', 0)),
+            PAYOS_URL => Http::response(createdLinkResponse()),
+        ]);
+        $order = placeOrder([[Product::factory()->create(['selling_price' => 45000])]]);
+        Event::fake([OrderStatusUpdated::class]);
+
+        $this->actingAs(owner())->post(route('orders.payos.store', $order));
+
+        Event::assertDispatchedTimes(OrderStatusUpdated::class, 1);
+        Event::assertDispatched(OrderStatusUpdated::class, fn (OrderStatusUpdated $event): bool => $event->change === OrderStatusUpdated::CHANGE_PAYMENT);
+
+        $this->actingAs(owner())->post(route('payos.cancel', PayosPaymentLink::sole()));
+
+        Event::assertDispatchedTimes(OrderStatusUpdated::class, 2);
+    });
+
+    test('a QR code that expired on payOS is broadcast once when it is noticed', function () {
+        $order = placeOrder([[Product::factory()->create(['selling_price' => 45000])]]);
+        $link = waitingLink($order);
+        Http::fake([PAYOS_URL.'/*' => Http::response(paymentInfoResponse('EXPIRED', 0))]);
+        Event::fake([OrderStatusUpdated::class]);
+
+        $this->actingAs(owner())->getJson(route('payos.status', $link))->assertJsonPath('final', true);
+        $this->actingAs(owner())->getJson(route('payos.status', $link))->assertJsonPath('final', true);
+
+        Event::assertDispatchedTimes(OrderStatusUpdated::class, 1);
     });
 
     test('staff without payments.create cannot create QR codes', function () {

@@ -14,20 +14,30 @@ use App\Services\PayOSService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
  * The customer follows their order (live), calls staff and pays by VietQR.
+ * Once the order ends it stays visible for Setting qr_history_minutes only.
  */
 class QrOrderController extends Controller
 {
-    public function show(Request $request, QrSession $qrSession, PayOSService $payos): View|RedirectResponse
+    public function show(Request $request, QrSession $qrSession, PayOSService $payos): View|RedirectResponse|Response
     {
         $order = $qrSession->order;
 
         if (! $order) {
             return to_route('qr.menu', $qrSession);
+        }
+
+        // A kept link must not show the order to whoever sits at the table next.
+        if (! $qrSession->historyIsVisible()) {
+            return response()->view('qr.unavailable', [
+                'message' => 'Đơn này đã kết thúc quá lâu nên không còn xem được. Quét mã QR trên bàn để gọi món mới.',
+                'tableNo' => $order->diningTable?->table_no,
+            ], 410);
         }
 
         $order->load(['diningTable', 'items.product', 'items.bundle.items.product', 'payment']);

@@ -6,6 +6,7 @@ use App\Http\Requests\ProductRequest;
 use App\Models\Category;
 use App\Models\Inventory;
 use App\Models\Product;
+use App\Support\ActivityLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\RedirectResponse;
@@ -59,6 +60,9 @@ class ProductController extends Controller
 
             $this->syncVariants($product, $request->variants());
 
+            ActivityLogger::log('product.created', "Thêm sản phẩm “{$product->name}” giá ".number_format((float) $product->selling_price, 0, ',', '.').' đ', $product,
+                null, ['name' => $product->name, 'selling_price' => (float) $product->selling_price, 'cost_price' => (float) $product->cost_price]);
+
             if ($request->boolean('track_stock')) {
                 Inventory::create([
                     'product_id' => $product->id,
@@ -87,6 +91,11 @@ class ProductController extends Controller
             $product->applyImage($request->file('image'), $request->boolean('remove_image'), 'products');
             $product->save();
 
+            // Price changes are what owners look for; other edits are logged too, without the image path.
+            ActivityLogger::changed('product.updated', $product->wasChanged('selling_price')
+                ? "Đổi giá “{$product->name}”: ".number_format((float) $product->getPrevious()['selling_price'], 0, ',', '.').' → '.number_format((float) $product->selling_price, 0, ',', '.').' đ'
+                : "Sửa sản phẩm “{$product->name}”", $product, ['name', 'selling_price', 'base_price', 'cost_price', 'category_id', 'is_available', 'is_featured', 'sku']);
+
             $this->syncVariants($product, $request->variants());
         });
 
@@ -109,6 +118,7 @@ class ProductController extends Controller
 
         try {
             $product->delete();
+            ActivityLogger::log('product.deleted', "Xóa sản phẩm “{$product->name}”", $product, ['name' => $product->name, 'selling_price' => (float) $product->selling_price]);
         } catch (QueryException) {
             return back()->with('error', "“{$product->name}” đã có trong đơn hàng nên không xóa được. Hãy chuyển sang “Ngừng bán”.");
         }

@@ -3,6 +3,7 @@
 use App\Broadcasting\KitchenChannel;
 use App\Broadcasting\OrderChannel;
 use App\Broadcasting\OrdersChannel;
+use App\Broadcasting\TablesChannel;
 use Illuminate\Support\Facades\Broadcast;
 
 /*
@@ -16,3 +17,4 @@ Broadcast::channel('App.Models.User.{id}', fn ($user, $id): bool => (int) $user-
 Broadcast::channel('kitchen', KitchenChannel::class);
 Broadcast::channel('orders', OrdersChannel::class);
 Broadcast::channel('order.{orderId}', OrderChannel::class);
+Broadcast::channel('tables', TablesChannel::class);

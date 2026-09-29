@@ -73,12 +73,6 @@
                     <div class="mt-4">@include('qr.partials.call-status')</div>
                 @endif
 
-                @if ($openOrder)
-                    <a href="{{ route('qr.order', $session) }}" class="mt-4 flex items-center justify-between gap-3 rounded-xl bg-cream/60 px-4 py-3 text-sm font-semibold text-espresso">
-                        <span>Đơn {{ $openOrder->order_number }} · {{ $openOrder->status->label() }}</span>
-                        <x-icon name="chevron-right" class="size-4" />
-                    </a>
-                @endif
 
                 <form method="POST" action="{{ route('qr.sessions.store', $qrCode->qr_token) }}" class="mt-5 flex flex-col gap-3">
                     @csrf
@@ -104,6 +98,49 @@
                     </button>
                 </form>
             </section>
+
+            {{-- What this phone ordered here: open orders, and closed ones for a few minutes (Setting qr_history_minutes). --}}
+            @if ($history->isNotEmpty())
+                <section class="mt-5 rounded-3xl bg-white p-5 shadow-[0_8px_30px_rgb(61_46_32/0.08)]" aria-labelledby="history-title">
+                    <h2 id="history-title" class="flex items-center gap-2 font-bold">
+                        <x-icon name="history" class="size-5 text-latte" /> Món bạn đã gọi
+                    </h2>
+                    <ul class="mt-3 flex flex-col gap-3">
+                        @foreach ($history as $past)
+                            @php
+                                $pastOrder = $past->order;
+                                [$pill, $dot] = $pastOrder->status->badgeClasses();
+                                $items = $pastOrder->items->where('status', '!=', \App\OrderItemStatus::Cancelled);
+                                $expiresAt = $past->historyExpiresAt();
+                            @endphp
+                            <li class="rounded-2xl border border-stone-200">
+                                <a href="{{ route('qr.order', $past) }}" class="flex flex-col gap-1.5 p-4 hover:bg-stone-50">
+                                    <span class="flex items-center justify-between gap-3">
+                                        <span class="font-mono text-sm font-bold">{{ $pastOrder->order_number }}</span>
+                                        <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium {{ $pill }}"><span class="size-1.5 rounded-full {{ $dot }}"></span>{{ $pastOrder->status->label() }}</span>
+                                    </span>
+                                    <span class="text-sm text-stone-700">{{ $items->map(fn ($item) => "{$item->quantity}× {$item->name()}")->implode(', ') ?: '—' }}</span>
+                                    <span class="flex items-center justify-between gap-3 text-sm">
+                                        <x-money :amount="$pastOrder->total_amount" class="font-mono font-semibold" />
+                                        <span class="text-xs text-stone-500">
+                                            {{ $pastOrder->payment ? 'Đã thanh toán' : ($pastOrder->status->isOpen() ? 'Chưa thanh toán' : '') }}
+                                            @if ($expiresAt)
+                                                · xem được đến {{ $expiresAt->format('H:i') }}
+                                            @endif
+                                        </span>
+                                    </span>
+                                </a>
+                                @if ($pastOrder->payment)
+                                    <a href="{{ \App\Http\Controllers\ReceiptController::publicUrl($pastOrder) }}" class="flex items-center justify-center gap-1.5 border-t border-stone-200 py-2.5 text-sm font-semibold text-latte-dark hover:bg-stone-50">
+                                        <x-icon name="receipt" class="size-4" /> Xem hóa đơn
+                                    </a>
+                                @endif
+                            </li>
+                        @endforeach
+                    </ul>
+                    <p class="mt-3 text-xs text-stone-500">Đơn đã xong được giữ lại {{ $historyMinutes }} phút trên điện thoại này rồi tự ẩn.</p>
+                </section>
+            @endif
 
             @if ($hoursToday)
                 <p class="mt-6 flex items-center justify-center gap-1.5 text-sm text-stone-600">

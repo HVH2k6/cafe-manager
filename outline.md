@@ -135,19 +135,43 @@ và event chỉ là **tín hiệu** — trang tự tải lại khối HTML từ 
 - [x] Test: `tests/Feature/OrderBroadcastTest.php` (payload, kênh, rollback, fallback khi Reverb lỗi, quyền vào kênh)
 - [x] Kênh cho khách QR: kênh **công khai** `qr-session.{token}` (khách không đăng nhập; tên kênh chứa token ngẫu nhiên 48 ký tự)
       nhận `order.status.updated` của đơn mình theo dõi + `staff.answered`; nhân viên nhận `staff.called` trên kênh `orders`
+- [x] Rà soát bổ sung (sau Bước 8) — những thao tác trước đây đổi dữ liệu mà màn hình khác không biết:
+      - **Sơ đồ bàn**: event `TableUpdated` (`table.updated`) trên kênh private `tables` ← `tables.view`, phát từ `DiningTableObserver`
+        (tạo đơn → Có khách, hủy → Trống, hoàn thành → Cần dọn, "Đã dọn xong", thêm / sửa / xóa bàn).
+        `FreeTable` đổi sang cập nhật qua model để observer bắt được. Đang mở menu "Đổi trạng thái" → hiện thanh "Tải lại"
+      - **Giảm giá** → `order.status.updated` với `change = discount` (trang đơn, danh sách, trang khách QR, dashboard)
+      - **Hoàn tiền đơn đã hoàn thành** (một phần / toàn bộ) và "Đã hoàn tiền cho khách" (payOS chuyển nhầm) → `change = payment`
+      - **Tạo / hủy mã QR payOS**, mã hết hạn phía payOS → `change = payment` (màn hình khác khóa / mở khóa sửa đơn ngay)
+      - **Dashboard & Báo cáo** tự cập nhật khi khoảng xem có hôm nay (nghe kênh `orders`; không có `orders.view` → polling 30 giây)
+      - `OrderStatusUpdated::changed($order, CHANGE_…)` cho mọi thay đổi không đổi trạng thái
+- [x] Badge sidebar (`App\Support\SidebarBadges`, store Alpine `badges`, `GET /sidebar-badges` lọc theo quyền):
+      Đơn hàng = đơn chờ xác nhận · Màn hình bếp = món chờ / đang làm · Sơ đồ bàn = bàn cần dọn · Tồn kho = sản phẩm sắp hết.
+      Đếm lại sau event trên kênh người dùng được nghe (`orders` / `kitchen` / `tables`), polling 30 giây khi mất kết nối,
+      120 giây khi có kết nối (nhập hàng / kiểm kê không phát event), và khi quay lại tab. Test: `SidebarBadgeTest.php`
+- [x] Test realtime: event + kênh + payload cho từng thao tác trên, rollback không phát, `/broadcasting/auth` từ chối
+      người thiếu quyền; đã chạy thử end-to-end với Reverb thật (client pusher-js nhận `table.updated`, `order.status.updated`)
 - [x] Lên server thật: `deploy/nginx/cafe-manager.conf` (proxy `/app`, `/apps` → Reverb 127.0.0.1:8080, wss cùng domain),
       `deploy/supervisor/cafe-reverb.conf`, hướng dẫn `.env` production + các bước deploy trong `deploy/README.md`
 
 Chạy khi dev (2 terminal): `php artisan serve` và `php artisan reverb:start` (thêm `--debug` để xem kết nối).
 Điện thoại / máy khác trong LAN: đặt `REVERB_HOST` = IP máy chủ, chạy `php artisan reverb:start --host=0.0.0.0`, rồi `npm run build`.
 
-## Bước 8 — Dashboard dữ liệu thật & Báo cáo *(tạm bỏ qua, làm sau Bước 9)*
+## Bước 8 — Dashboard dữ liệu thật & Báo cáo ✅
 
-- [ ] Thay dữ liệu mẫu trong `DashboardController` bằng query thật
-- [ ] Bộ lọc "Hôm nay / 7 ngày / 30 ngày / tùy chọn"
-- [ ] Báo cáo doanh thu theo ngày / tháng, theo phương thức thanh toán
-- [ ] Sản phẩm bán chạy (view `product_popularity`)
-- [ ] Xuất Excel/CSV — quyền `reports.export`
+Số liệu tính trong `App\Reports\SalesReport` thẳng từ `orders` / `order_items` / `payments` (không dùng `daily_sales_summary`, xem luật 6).
+**Doanh thu = đơn đã hoàn thành** (theo `completed_at`, sau giảm giá); hoàn tiền trừ vào ngày hoàn (`refunded_at`) → "Thực thu".
+
+- [x] Dashboard dùng query thật: số đơn (không tính đơn hủy), doanh thu, trung bình/đơn, số phần đã bán, tiến độ đơn,
+      biểu đồ theo giờ (1 ngày) hoặc theo ngày, món bán chạy, tỷ lệ phương thức thanh toán, đơn gần đây
+      - Ai đăng nhập cũng xem được; **số tiền cần `reports.view`**, bảng đơn gần đây cần `orders.view`
+- [x] Bộ lọc "Hôm nay / 7 ngày / 30 ngày / Tùy chọn" (`App\Reports\ReportPeriod`): ngày đảo ngược tự đổi chỗ, tối đa 366 ngày, ngày sai → mặc định
+- [x] Trang Báo cáo (`/reports`, `reports.view`): doanh thu theo ngày / tháng (tách tiền mặt / thẻ / chuyển khoản, hoàn tiền),
+      theo phương thức thanh toán, theo hình thức (tại bàn / mang về), top 20 sản phẩm bán chạy
+- [x] Sản phẩm bán chạy: tính từ `order_items` của đơn hoàn thành, bỏ món đã hủy, gồm cả combo
+      (view `product_popularity` không dùng: cố định 30 ngày, tính cả đơn chưa xong / đã hủy)
+- [x] Xuất CSV (UTF-8 có BOM, Excel mở đúng tiếng Việt) — quyền mới `reports.export` (mặc định Quản lý):
+      doanh thu theo ngày/tháng, sản phẩm bán chạy, danh sách đơn; chặn chèn công thức Excel (`=`, `+`, `-`, `@`)
+- [x] Test: `tests/Feature/ReportTest.php` (25 test)
 
 ## Bước 9 — Gọi món bằng QR (khách tự đặt, không cần đăng nhập) ✅
 
@@ -181,11 +205,28 @@ Chạy khi dev (2 terminal): `php artisan serve` và `php artisan reverb:start` 
       gọi nhân viên 3/phút/phiên (bấm lại trong 60 giây không tạo cuộc gọi mới); giỏ ≤ 30 dòng, ≤ 20 phần/món
 - [x] Test: `tests/Feature/QrOrderingTest.php` (27 test)
 
-## Bước 10 — Cài đặt & nhật ký
+## Bước 10 — Cài đặt & nhật ký ✅
 
-- [ ] Cài đặt quán: tên quán, giờ mở cửa, thông tin in hóa đơn
-- [ ] Nhật ký hoạt động (`activity_logs`): ai sửa gì, lúc nào (giá cũ/mới, hủy đơn, đổi quyền…)
-- [ ] Quyền: `settings.*`
+Trang "Cài đặt" có 3 tab: Thông tin quán · Giờ nhận đơn QR · Nhật ký hoạt động.
+
+- [x] Cài đặt quán (bảng `settings` key/value, `App\Models\Setting`, có cache): tên, địa chỉ, SĐT, lời cảm ơn + ghi chú cuối hóa đơn
+      (Wi-Fi, MST…), giờ mở cửa (hỗ trợ qua đêm, hiện trên Tổng quan)
+      - Chưa lưu thì dùng giá trị `.env` (`CAFE_NAME`, `CAFE_ADDRESS`, `CAFE_PHONE`); đã lưu thì ghi đè `config('app.cafe_*')` lúc khởi động
+- [x] **Lịch sử gọi món QR trên điện thoại khách**, giữ `qr_history_minutes` phút (mặc định 20, chọn 5–120) sau khi đơn xong / bị hủy:
+      - Quét lại mã trên bàn → khối "Món bạn đã gọi": mọi đơn điện thoại này đã gửi ở bàn này, trạng thái, tổng tiền,
+        "xem được đến HH:MM", nút "Xem hóa đơn" (link hóa đơn điện tử có chữ ký) khi đã thanh toán
+      - Lưu trong session trình duyệt của khách (tối đa 10 phiên / bàn), **không** lộ cho điện thoại khác ngồi sau ở cùng bàn
+      - Hết giờ: khối tự ẩn và link `/s/{token}/order` cũ trả 410 "không còn xem được"
+- [x] Nhật ký hoạt động (`activity_logs`, thêm cột `description`; `App\Support\ActivityLogger`):
+      hủy đơn, giảm giá, bỏ món, hoàn tiền, thêm / sửa (giá cũ → mới) / xóa sản phẩm, thêm / sửa (đổi vai trò, lương) / khóa / mở khóa nhân viên,
+      đặt lại mật khẩu, đổi phân quyền (+ quyền thêm, − quyền bỏ), sửa cài đặt
+      - Chỉ ghi khi transaction commit; chỉ ghi các trường thật sự đổi; mật khẩu / token không bao giờ vào log; ghi IP, trình duyệt
+      - Nhập / kiểm kê kho không ghi lại ở đây (đã có `inventory_transactions` với người ghi, thời gian)
+      - Trang nhật ký: lọc theo loại, người, ngày, tìm theo nội dung; xem chi tiết trước / sau
+- [x] Quyền: `settings.view`, `settings.update`, mới `settings.activity` (xem nhật ký) — mặc định chỉ Chủ quán
+- [x] Test: `QrHistoryTest.php` (7), `SettingsAndActivityTest.php` (19)
+
+Còn để sau: trang "Tài khoản của tôi", ảnh đại diện; tự dọn nhật ký cũ (hiện giữ mãi).
 
 ---
 
@@ -201,9 +242,8 @@ Viết đúng luôn những chỗ trigger cũ làm sai.
 4. ✅ **Nhả kho khi hủy đơn / bỏ món**: chỉ trả lại phần đang giữ. Tồn kho thực chưa đổi nên **không** ghi giao dịch kho
    (trigger cũ ghi `return` số âm là sai nghĩa).
 5. ✅ **Trừ kho khi đơn hoàn thành** — trigger cũ **không có**: trừ tồn, nhả phần giữ, ghi giao dịch `sale` kèm mã đơn — `StockReservation::consume()`.
-6. **Tổng hợp doanh thu ngày** (`daily_sales_summary`) khi đơn hoàn thành. *(Bước 7–8)*
-   - Trigger cũ chỉ cộng tổng doanh thu → cần cộng thêm `cash_revenue`, `card_revenue`, `dine_in_orders`, `takeaway_orders`, `tables_used`.
-   - Có thể bỏ bảng này, tính trực tiếp từ `orders` + `payments` nếu dữ liệu chưa lớn.
+6. ✅ **Tổng hợp doanh thu ngày**: **không** ghi bảng `daily_sales_summary` — tính trực tiếp từ `orders` + `payments` (`SalesReport`),
+   nên không bao giờ lệch khi hoàn tiền / sửa đơn. Nếu sau này dữ liệu lớn làm báo cáo chậm mới cân nhắc bảng tổng hợp.
 7. ✅ **Kiểm tra giờ nhận đơn QR** — hàm `is_qr_operating()` trong file SQL **chưa từng được tạo** (lỗi khi import); viết bằng PHP, hỗ trợ ca qua đêm (18:00 → 02:00) — `QrOperatingHour::isOpenAt()`.
 8. ✅ **Phát event realtime** chỉ sau khi transaction commit, lỗi broadcast không được làm hỏng thao tác — `OrderBroadcast::send()`, `OrderObserver`.
    Code mới đổi trạng thái đơn không cần tự phát event (observer lo); đổi món / tiền mà không đổi trạng thái thì gọi `OrderStatusUpdated::send(..., CHANGE_ITEMS | CHANGE_PAYMENT)`.
@@ -213,7 +253,10 @@ Lưu ý khác về file `cafe_schema_final.sql`: bảng `orders` khai báo khóa
 
 ## Gợi ý thứ tự làm tiếp
 
-~~Bước 0 → 1 → 2 → 3 → 4 → 5 (Đơn hàng) → 6 (Bếp) → 7 (Thanh toán) → 7A (Realtime) → 9 (QR)~~ ✅ → **Bước 8 (Dashboard thật & báo cáo)** → Bước 10.
+~~Bước 0 → 1 → 2 → 3 → 4 → 5 (Đơn hàng) → 6 (Bếp) → 7 (Thanh toán) → 7A (Realtime) → 9 (QR) → 8 (Dashboard & báo cáo) → 10 (Cài đặt & nhật ký)~~ ✅
+
+Lên server sau Bước 8–10: `php artisan migrate --force`, `php artisan db:seed --class=PermissionSeeder --force`
+(thêm quyền `reports.export`, `settings.activity`), `npm run build`, `php artisan optimize:clear`, restart Reverb.
 
 Thử gọi món QR trên điện thoại (cùng Wi-Fi): đặt `APP_PUBLIC_URL=http://<IP-máy>:8000`, chạy `php artisan serve --host=0.0.0.0`,
 tạo mã ở "Mã QR gọi món" rồi quét. Muốn khách nhận realtime thì làm thêm phần LAN của Reverb ở Bước 7A

@@ -6,6 +6,7 @@ use App\ContractType;
 use App\Http\Requests\EmployeeRequest;
 use App\Models\Role;
 use App\Models\User;
+use App\Support\ActivityLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -61,6 +62,9 @@ class EmployeeController extends Controller
             $employee = User::create([...$request->accountData(), 'is_active' => true]);
             $employee->employee()->create([...$request->profileData(), 'is_active' => true]);
 
+            ActivityLogger::log('employee.created', "Thêm nhân viên {$employee->name} ({$employee->role?->name})", $employee,
+                null, ['name' => $employee->name, 'email' => $employee->email, 'role' => $employee->role?->name]);
+
             return $employee;
         });
 
@@ -83,8 +87,21 @@ class EmployeeController extends Controller
     public function update(EmployeeRequest $request, User $user): RedirectResponse
     {
         DB::transaction(function () use ($request, $user): void {
+            $roleBefore = $user->role?->name;
             $user->update($request->accountData());
-            $user->employee()->updateOrCreate([], $request->profileData());
+            $profile = $user->employee()->updateOrCreate([], $request->profileData());
+
+            // A role change is what matters most (it changes permissions); salary changes are logged too.
+            $roleAfter = $user->fresh('role')->role?->name;
+            $roleChanged = $user->wasChanged('role_id');
+
+            ActivityLogger::changed('employee.updated', $roleChanged
+                ? "Đổi vai trò {$user->name}: {$roleBefore} → {$roleAfter}"
+                : "Sửa thông tin nhân viên {$user->name}", $user, ['name', 'email', 'phone', 'role_id']);
+
+            if (! $profile->wasRecentlyCreated) {
+                ActivityLogger::changed('employee.updated', "Sửa hồ sơ nhân viên {$user->name}", $profile, ['position', 'department', 'contract_type', 'salary']);
+            }
         });
 
         return to_route('employees.index')->with('status', "Đã cập nhật nhân viên {$user->name}.");

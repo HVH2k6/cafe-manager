@@ -1,7 +1,10 @@
 <x-layouts.app title="Giờ nhận đơn QR">
-    <div class="flex flex-wrap items-start justify-between gap-4">
+    <h1 class="text-[32px] leading-tight font-bold tracking-tight">Cài đặt</h1>
+    @include('settings.partials.tabs')
+
+    <div class="mt-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-            <h1 class="text-[32px] leading-tight font-bold tracking-tight">Giờ nhận đơn QR</h1>
+            <h2 class="text-xl font-bold">Giờ nhận đơn QR</h2>
             <p class="mt-1 text-stone-600">Ngoài giờ này khách vẫn xem menu và gọi nhân viên được, nhưng không gửi đơn được.</p>
         </div>
         <span @class([

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\QrSessionStatus;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -104,6 +105,32 @@ class QrSession extends Model
         }
 
         return $this->expires_at?->isFuture() || ($this->order?->status->isOpen() ?? false);
+    }
+
+    /**
+     * Until when the phone may still look back at this session's order once it
+     * is over (Setting qr_history_minutes after it was completed or cancelled),
+     * so the next customers at the table never see it. Null while the order is open.
+     */
+    public function historyExpiresAt(): ?CarbonInterface
+    {
+        $order = $this->order;
+
+        if (! $order || $order->status->isOpen()) {
+            return null;
+        }
+
+        $closedAt = $order->completed_at ?? $this->completed_at ?? $order->updated_at;
+
+        return $closedAt->copy()->addMinutes((int) Setting::get('qr_history_minutes'));
+    }
+
+    /**
+     * Whether the phone may still see this session's order: open, or closed less than the history window ago.
+     */
+    public function historyIsVisible(): bool
+    {
+        return $this->order !== null && ($this->historyExpiresAt()?->isFuture() ?? true);
     }
 
     /**

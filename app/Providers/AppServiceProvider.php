@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\QrSession;
+use App\Models\Setting;
 use App\Models\User;
 use App\Services\PayOSService;
 use Closure;
@@ -63,6 +64,9 @@ class AppServiceProvider extends ServiceProvider
             ], 404)));
 
         $this->configureQrRateLimits();
+
+        // Cafe name / address / phone saved on the settings page override the .env values.
+        Setting::applyToConfig();
     }
 
     /**

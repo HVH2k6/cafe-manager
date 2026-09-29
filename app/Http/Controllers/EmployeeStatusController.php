@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,10 @@ class EmployeeStatusController extends Controller
         DB::transaction(function () use ($user, $isActive): void {
             $user->update(['is_active' => $isActive]);
             $user->employee?->update(['is_active' => $isActive]);
+
+            ActivityLogger::log($isActive ? 'employee.unlocked' : 'employee.locked', $isActive
+                ? "Mở lại tài khoản {$user->name}"
+                : "Cho {$user->name} nghỉ việc, khóa tài khoản", $user, ['is_active' => ! $isActive], ['is_active' => $isActive]);
         });
 
         if (! $isActive) {

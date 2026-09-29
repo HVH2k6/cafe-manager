@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Support\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -27,6 +28,7 @@ class EmployeePasswordController extends Controller
         ]);
 
         $user->update(['password' => $validated['password']]);
+        ActivityLogger::log('employee.password_reset', "Đặt lại mật khẩu cho {$user->name}", $user);
 
         if (! $user->is($request->user())) {
             $user->logoutEverywhere();

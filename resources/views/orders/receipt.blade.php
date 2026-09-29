@@ -133,7 +133,12 @@
             @endif
 
             <hr class="rule">
-            <p class="center">Cảm ơn quý khách!</p>
+            @if ($footer = \App\Models\Setting::get('receipt_footer'))
+                <p class="center">{{ $footer }}</p>
+            @endif
+            @if ($note = \App\Models\Setting::get('receipt_note'))
+                <p class="center muted" style="white-space: pre-line">{{ $note }}</p>
+            @endif
         </main>
 
         @if (! $isPublic && request()->boolean('print'))

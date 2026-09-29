@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\User;
 use App\OrderItemStatus;
 use App\OrderStatus;
+use App\Support\ActivityLogger;
 use App\TableStatus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -47,11 +48,17 @@ class CancelOrder
                 ->whereIn('status', [OrderItemStatus::Pending, OrderItemStatus::Preparing, OrderItemStatus::Ready])
                 ->update(['status' => OrderItemStatus::Cancelled]);
 
+            $statusBefore = $order->status;
+
             $order->update([
                 'status' => OrderStatus::Cancelled,
                 'cancelled_reason' => $reason,
                 'cancelled_by' => $by->id,
             ]);
+
+            ActivityLogger::log('order.cancelled', "Hủy đơn {$order->order_number} ({$order->placeLabel()}): {$reason}", $order,
+                ['status' => $statusBefore->value, 'total_amount' => (float) $order->total_amount],
+                ['status' => OrderStatus::Cancelled->value, 'cancelled_reason' => $reason]);
 
             FreeTable::after($order, TableStatus::Available);
 

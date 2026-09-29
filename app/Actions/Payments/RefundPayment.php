@@ -3,10 +3,12 @@
 namespace App\Actions\Payments;
 
 use App\Actions\Orders\CancelOrder;
+use App\Events\OrderStatusUpdated;
 use App\Models\Payment;
 use App\Models\User;
 use App\OrderStatus;
 use App\PaymentMethod;
+use App\Support\ActivityLogger;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -63,8 +65,16 @@ class RefundPayment
                 'refunded_at' => now(),
             ]);
 
+            ActivityLogger::log('payment.refunded', 'Hoàn '.number_format($amount, 0, ',', '.')." đ ({$method->label()}) cho đơn {$order->order_number}: {$reason}", $payment,
+                ['amount' => $paid, 'status' => Payment::STATUS_COMPLETED],
+                ['refund_amount' => $amount, 'refund_method' => $method->value, 'refund_reference' => $reference, 'refund_reason' => $reason]);
+
             if ($orderIsOpen) {
+                // Cancelling broadcasts the status change (OrderObserver).
                 $this->cancelOrder->handle($order, $by, "Hoàn tiền: {$reason}");
+            } else {
+                // A completed order keeps its status: say its payment changed (order page, reports).
+                OrderStatusUpdated::changed($order, OrderStatusUpdated::CHANGE_PAYMENT);
             }
 
             return $payment;

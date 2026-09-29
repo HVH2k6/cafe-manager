@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Observers\DiningTableObserver;
 use App\TableStatus;
 use Database\Factories\DiningTableFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -13,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * A physical table in the cafe (table `tables`; named DiningTable to avoid confusion with DB tables).
  */
 #[Fillable(['table_no', 'capacity', 'location', 'section', 'status', 'notes'])]
+#[ObservedBy(DiningTableObserver::class)]
 class DiningTable extends Model
 {
     /** @use HasFactory<DiningTableFactory> */

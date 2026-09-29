@@ -9,6 +9,7 @@ use App\Http\Requests\OrderLinesRequest;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\OrderItemStatus;
+use App\Support\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -43,6 +44,9 @@ class OrderItemController extends Controller
 
             $order->recalculateTotals();
             $order->syncStatusWithItems();
+
+            ActivityLogger::log('order.item_removed', "Bỏ “{$item->name()}” ×{$item->quantity} khỏi đơn {$order->order_number}", $order,
+                ['item' => $item->name(), 'quantity' => $item->quantity, 'line_total' => $item->lineTotal()], ['total_amount' => (float) $order->total_amount]);
 
             OrderStatusUpdated::send($order, $statusBefore, $order->status->value, OrderStatusUpdated::CHANGE_ITEMS);
         });

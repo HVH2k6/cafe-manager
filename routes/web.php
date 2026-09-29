@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\ActivityLogController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\DashboardController;
@@ -28,8 +29,11 @@ use App\Http\Controllers\QrCodeController;
 use App\Http\Controllers\QrOperatingHourController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\RefundController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\RolePermissionController;
+use App\Http\Controllers\SettingController;
+use App\Http\Controllers\SidebarBadgeController;
 use App\Http\Controllers\StaffAlertController;
 use App\Http\Middleware\EnsureQrSessionIsUsable;
 use Illuminate\Support\Facades\Route;
@@ -74,6 +78,8 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
     Route::post('logout', [LoginController::class, 'destroy'])->name('logout');
+    // Each count inside is filtered by the user's permissions (SidebarBadges).
+    Route::get('sidebar-badges', SidebarBadgeController::class)->name('sidebar-badges')->middleware('throttle:60,1');
 
     Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index')->middleware('can:employees.view');
     Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create')->middleware('can:employees.create');
@@ -142,8 +148,16 @@ Route::middleware('auth')->group(function () {
     Route::post('qr-calls/{call}/answer', [QrCallController::class, 'answer'])->name('qr-calls.answer')->middleware('can:orders.view');
     Route::get('staff-alerts', StaffAlertController::class)->name('staff-alerts')->middleware('can:orders.view');
 
+    Route::get('settings', [SettingController::class, 'edit'])->name('settings.general.edit')->middleware('can:settings.view');
+    Route::put('settings', [SettingController::class, 'update'])->name('settings.general.update')->middleware('can:settings.update');
+    Route::get('settings/activity', [ActivityLogController::class, 'index'])->name('settings.activity')->middleware('can:settings.activity');
+
     Route::get('settings/qr-hours', [QrOperatingHourController::class, 'edit'])->name('settings.qr-hours.edit')->middleware('can:settings.view');
     Route::put('settings/qr-hours', [QrOperatingHourController::class, 'update'])->name('settings.qr-hours.update')->middleware('can:settings.update');
+
+    Route::get('reports', [ReportController::class, 'index'])->name('reports.index')->middleware('can:reports.view');
+    Route::get('reports/export/{type}', [ReportController::class, 'export'])->name('reports.export')->middleware('can:reports.export')
+        ->whereIn('type', array_keys(ReportController::EXPORTS));
 
     Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index')->middleware('can:inventory.view');
     Route::get('inventory/{product}', [InventoryController::class, 'show'])->name('inventory.show')->middleware('can:inventory.view');

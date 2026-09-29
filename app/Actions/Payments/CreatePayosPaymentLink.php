@@ -2,6 +2,7 @@
 
 namespace App\Actions\Payments;
 
+use App\Events\OrderStatusUpdated;
 use App\Exceptions\PayOSException;
 use App\Models\Order;
 use App\Models\PayosPaymentLink;
@@ -64,6 +65,9 @@ class CreatePayosPaymentLink
         $data = $this->payos->cancelPaymentLink($link->order_code, $reason);
 
         $link->update(['status' => $data['status'] ?? PayosPaymentLink::CANCELLED]);
+
+        // The order is no longer locked by a waiting QR code.
+        OrderStatusUpdated::changed($link->order, OrderStatusUpdated::CHANGE_PAYMENT);
     }
 
     /**
@@ -114,6 +118,9 @@ class CreatePayosPaymentLink
                 'qr_code' => $data['qrCode'] ?? null,
                 'status' => $data['status'] ?? PayosPaymentLink::PENDING,
             ])->save();
+
+            // A waiting QR code locks the order's items and amount: other screens must show it.
+            OrderStatusUpdated::changed($order, OrderStatusUpdated::CHANGE_PAYMENT);
 
             return $link;
         }

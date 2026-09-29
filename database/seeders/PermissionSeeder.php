@@ -35,13 +35,15 @@ class PermissionSeeder extends Seeder
         'products.delete' => ['Xóa sản phẩm, danh mục, combo', ['Quản lý']],
         'inventory.view' => ['Xem tồn kho', ['Quản lý', 'Pha chế']],
         'inventory.update' => ['Nhập hàng, kiểm kê, ghi hư hỏng, chỉnh ngưỡng kho', ['Quản lý']],
-        'reports.view' => ['Xem báo cáo', ['Quản lý']],
+        'reports.view' => ['Xem báo cáo doanh thu (và số tiền trên Tổng quan)', ['Quản lý']],
+        'reports.export' => ['Xuất báo cáo ra file Excel/CSV', ['Quản lý']],
         'employees.view' => ['Xem nhân viên', ['Quản lý']],
         'employees.create' => ['Thêm nhân viên', []],
         'employees.update' => ['Sửa nhân viên, đặt lại mật khẩu', []],
         'employees.delete' => ['Cho nghỉ việc / khóa tài khoản', []],
         'settings.view' => ['Xem cài đặt', []],
-        'settings.update' => ['Sửa cài đặt', []],
+        'settings.update' => ['Sửa cài đặt (thông tin quán, giờ, lịch sử QR)', []],
+        'settings.activity' => ['Xem nhật ký hoạt động', []],
     ];
 
     /**

@@ -2,64 +2,81 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Setting;
+use App\OrderItemStatus;
 use App\OrderStatus;
-use Illuminate\Support\Carbon;
+use App\Reports\ReportPeriod;
+use App\Reports\SalesReport;
+use Carbon\CarbonInterface;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class DashboardController extends Controller
 {
     /**
-     * Show today's overview.
-     *
-     * TODO: the figures below are sample data with the shape the view expects;
-     * replace them with queries on orders / order_items / payments.
+     * Overview of a period (today by default). Every staff member may open it;
+     * money figures need `reports.view`, the recent orders need `orders.view`.
      */
-    public function __invoke(): View
+    public function __invoke(Request $request): View
     {
-        /** @var array<int, int> $hourlySales hour => revenue (thousand VND) */
-        $hourlySales = [
-            7 => 60, 8 => 170, 9 => 320, 10 => 240, 11 => 150, 12 => 110, 13 => 210,
-            14 => 250, 15 => 190, 16 => 140, 17 => 160, 18 => 200, 19 => 170, 20 => 90, 21 => 40,
-        ];
+        $period = ReportPeriod::fromRequest($request);
+        $user = $request->user();
+        $range = [$period->from, $period->to];
 
-        $recentOrders = [
-            ['number' => 'ORD-2025-0012', 'table' => 'Bàn 2', 'items' => 'Cappuccino ×2, Bánh mì bơ tỏi', 'total' => 72000, 'status' => OrderStatus::Pending, 'time' => '13:10:04'],
-            ['number' => 'ORD-2025-0011', 'table' => 'Bàn 5', 'items' => 'Latte, Croissant', 'total' => 57000, 'status' => OrderStatus::Preparing, 'time' => '12:58:41'],
-            ['number' => 'ORD-2025-0010', 'table' => 'Bàn 5', 'items' => 'Combo Cà phê + Bánh mì', 'total' => 50000, 'status' => OrderStatus::Completed, 'time' => '12:45:30'],
-            ['number' => 'ORD-2025-0009', 'table' => 'Mang về', 'items' => 'Trà đào cam sả ×2', 'total' => 70000, 'status' => OrderStatus::Served, 'time' => '12:40:15'],
-        ];
+        $report = new SalesReport($period);
+        $summary = $report->summary();
+
+        $placed = Order::whereBetween('created_at', $range)->where('status', '!=', OrderStatus::Cancelled);
 
         return view('dashboard', [
+            'period' => $period,
             'openingHours' => $this->openingHours(now()),
+            'canSeeMoney' => $user->can('reports.view'),
             'stats' => [
-                'orders' => 12,
-                'revenue' => array_sum($hourlySales) * 1000,
-                'customers' => 45,
-                'completedOrders' => 10,
-                'pendingOrders' => 2,
+                'orders' => (clone $placed)->count(),
+                'revenue' => $summary['revenue'],
+                'net' => $summary['net'],
+                'average' => $summary['average'],
+                'itemsSold' => (int) OrderItem::whereIn('order_id', (clone $placed)->select('id'))
+                    ->where('status', '!=', OrderItemStatus::Cancelled)
+                    ->sum('quantity'),
+                'completedOrders' => $summary['orders'],
+                'openOrders' => (clone $placed)->whereIn('status', OrderStatus::open())->count(),
+                'cancelledOrders' => $summary['cancelled'],
             ],
-            'hourlySales' => $hourlySales,
-            'topProducts' => [
-                ['name' => 'Cappuccino', 'quantity' => 45, 'unit' => 'ly'],
-                ['name' => 'Bánh mì', 'quantity' => 32, 'unit' => 'cái'],
-                ['name' => 'Iced Coffee', 'quantity' => 28, 'unit' => 'ly'],
-            ],
-            'recentOrders' => $recentOrders,
+            // Hours for a single day, days for a longer period.
+            'chart' => $period->isSingleDay() ? $report->hourly() : $report->daily(),
+            'chartTitle' => $period->isSingleDay() ? 'Doanh thu theo giờ' : 'Doanh thu theo ngày',
+            'topProducts' => $report->topProducts(5),
+            'paymentMethods' => $report->byPaymentMethod(),
+            'recentOrders' => $user->can('orders.view')
+                ? Order::with(['diningTable', 'items.product', 'items.bundle'])->whereBetween('created_at', $range)->latest('id')->limit(8)->get()
+                : collect(),
         ]);
     }
 
     /**
      * @return array{opens: string, closes: string, isOpen: bool}
      */
-    private function openingHours(Carbon $now): array
+    private function openingHours(CarbonInterface $now): array
     {
-        $opens = $now->copy()->setTime(7, 0);
-        $closes = $now->copy()->setTime(22, 0);
+        [$openHour, $openMinute] = array_map('intval', explode(':', (string) Setting::get('opening_time')));
+        [$closeHour, $closeMinute] = array_map('intval', explode(':', (string) Setting::get('closing_time')));
+
+        $opens = $now->copy()->setTime($openHour, $openMinute);
+        $closes = $now->copy()->setTime($closeHour, $closeMinute);
+
+        // Closing before opening: open overnight (18:00 → 02:00).
+        $isOpen = $closes->lessThanOrEqualTo($opens)
+            ? $now->greaterThanOrEqualTo($opens) || $now->lessThan($closes)
+            : $now->between($opens, $closes->copy()->subSecond());
 
         return [
             'opens' => $opens->format('G:i'),
             'closes' => $closes->format('G:i'),
-            'isOpen' => $now->between($opens, $closes->copy()->subSecond()),
+            'isOpen' => $isOpen,
         ];
     }
 }

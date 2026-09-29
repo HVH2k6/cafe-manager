@@ -1,8 +1,8 @@
 @props(['title'])
 
 @php
-    $lowStockCount = auth()->user()->can('inventory.view') ? \App\Models\Inventory::lowStockCount() : 0;
-    $pendingOrders = auth()->user()->can('orders.view') ? \App\Models\Order::where('status', \App\OrderStatus::Pending)->count() : 0;
+    // Sidebar counts the user may see; kept live by the `badges` store (realtime.js).
+    $badges = \App\Support\SidebarBadges::for(auth()->user());
 @endphp
 
 <!DOCTYPE html>
@@ -18,7 +18,11 @@
         @fonts
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="min-h-screen bg-paper font-sans text-ink antialiased" data-pending-orders="{{ $pendingOrders }}">
+    <body
+        class="min-h-screen bg-paper font-sans text-ink antialiased"
+        data-badges="{{ json_encode((object) $badges) }}"
+        data-badge-settings="{{ json_encode(['url' => route('sidebar-badges'), 'channels' => \App\Support\SidebarBadges::channelsFor(auth()->user())]) }}"
+    >
         <div data-sidebar-backdrop class="fixed inset-0 z-30 hidden bg-ink/40 lg:hidden"></div>
 
         @can('orders.view')
@@ -67,28 +71,28 @@
                     <x-sidebar-link :href="route('orders.index')" icon="receipt" :active="request()->routeIs('orders.*')">
                         Đơn hàng
                         <x-slot:badge>
-                            {{-- Orders waiting for confirmation; kept live by the staffAlerts component. --}}
-                            <span
-                                x-data
-                                x-show="$store.orders.pending > 0"
-                                x-text="$store.orders.pending"
-                                title="{{ $pendingOrders }} đơn chờ xác nhận"
-                                :title="$store.orders.pending + ' đơn chờ xác nhận'"
-                                :class="$store.orders.bumped && 'animate-bounce'"
-                                @if ($pendingOrders === 0) style="display: none" @endif
-                                class="flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-600 px-1 text-xs font-semibold text-white"
-                            >{{ $pendingOrders }}</span>
+                            <x-sidebar-badge key="pending" :count="$badges['pending'] ?? 0" label="đơn chờ xác nhận" />
                         </x-slot:badge>
                     </x-sidebar-link>
                 @endcan
                 @can('kitchen.view')
-                    <x-sidebar-link :href="route('kitchen.index')" icon="monitor" :active="request()->routeIs('kitchen.*')">Màn hình bếp</x-sidebar-link>
+                    <x-sidebar-link :href="route('kitchen.index')" icon="monitor" :active="request()->routeIs('kitchen.*')">
+                        Màn hình bếp
+                        <x-slot:badge>
+                            <x-sidebar-badge key="kitchen" :count="$badges['kitchen'] ?? 0" label="món đang chờ bếp làm" tone="blue" />
+                        </x-slot:badge>
+                    </x-sidebar-link>
                 @endcan
                 @can('tables.view')
-                    <x-sidebar-link :href="route('tables.index')" icon="armchair" :active="request()->routeIs('tables.*')">Sơ đồ bàn</x-sidebar-link>
+                    <x-sidebar-link :href="route('tables.index')" icon="armchair" :active="request()->routeIs('tables.*')">
+                        Sơ đồ bàn
+                        <x-slot:badge>
+                            <x-sidebar-badge key="dirty" :count="$badges['dirty'] ?? 0" label="bàn cần dọn" tone="soft" />
+                        </x-slot:badge>
+                    </x-sidebar-link>
                 @endcan
 
-                @canany(['products.view', 'inventory.view', 'reports.view', 'employees.view', 'manage-permissions', 'settings.view'])
+                @canany(['products.view', 'inventory.view', 'reports.view', 'employees.view', 'manage-permissions', 'settings.view', 'settings.activity'])
                     <p class="mt-4 mb-1 px-3 text-xs font-semibold tracking-wider text-stone-500 uppercase">Quản lý</p>
                 @endcanany
 
@@ -98,17 +102,13 @@
                 @can('inventory.view')
                     <x-sidebar-link :href="route('inventory.index')" icon="package" :active="request()->routeIs('inventory.*')">
                         Tồn kho
-                        @if ($lowStockCount > 0)
-                            <x-slot:badge>
-                                <span class="flex items-center gap-1 text-xs font-semibold text-amber-600" title="{{ $lowStockCount }} sản phẩm sắp hết">
-                                    <span class="size-1.5 rounded-full bg-amber-500"></span>{{ $lowStockCount }}
-                                </span>
-                            </x-slot:badge>
-                        @endif
+                        <x-slot:badge>
+                            <x-sidebar-badge key="low_stock" :count="$badges['low_stock'] ?? 0" label="sản phẩm sắp hết" tone="soft" />
+                        </x-slot:badge>
                     </x-sidebar-link>
                 @endcan
                 @can('reports.view')
-                    <x-sidebar-link icon="chart-bar">Báo cáo</x-sidebar-link>
+                    <x-sidebar-link :href="route('reports.index')" icon="chart-bar" :active="request()->routeIs('reports.*')">Báo cáo</x-sidebar-link>
                 @endcan
                 @can('employees.view')
                     <x-sidebar-link :href="route('employees.index')" icon="users" :active="request()->routeIs('employees.*')">Nhân viên</x-sidebar-link>
@@ -117,7 +117,9 @@
                     <x-sidebar-link :href="route('permissions.index')" icon="shield-check" :active="request()->routeIs('permissions.*', 'roles.*')">Phân quyền</x-sidebar-link>
                 @endcan
                 @can('settings.view')
-                    <x-sidebar-link :href="route('settings.qr-hours.edit')" icon="sliders" :active="request()->routeIs('settings.*')">Cài đặt</x-sidebar-link>
+                    <x-sidebar-link :href="route('settings.general.edit')" icon="sliders" :active="request()->routeIs('settings.*')">Cài đặt</x-sidebar-link>
+                @elsecan('settings.activity')
+                    <x-sidebar-link :href="route('settings.activity')" icon="history" :active="request()->routeIs('settings.*')">Nhật ký</x-sidebar-link>
                 @endcan
             </nav>
 

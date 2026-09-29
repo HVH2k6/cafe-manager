@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Actions\Payments\RefundPayment;
+use App\Events\OrderStatusUpdated;
 use App\Models\Payment;
 use App\Models\PayosPaymentLink;
 use App\PaymentMethod;
@@ -68,6 +69,7 @@ class RefundController extends Controller
         ]);
 
         $link->update([...$validated, 'refunded_at' => now(), 'refunded_by' => $request->user()->id]);
+        OrderStatusUpdated::changed($link->order, OrderStatusUpdated::CHANGE_PAYMENT);
 
         return back()->with('status', 'Đã ghi nhận hoàn '.number_format($link->amount_paid, 0, ',', '.').' đ cho khách.');
     }

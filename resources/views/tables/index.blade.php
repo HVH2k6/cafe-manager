@@ -1,8 +1,15 @@
 <x-layouts.app title="Sơ đồ bàn">
+    {{-- Realtime: a table seated / freed / cleaned on another screen refreshes the plan (not while a status menu is open). --}}
+    <div x-data="liveRegion({ channel: 'tables', events: ['table.updated'], poll: 20, pollWhenConnected: 120 })">
+    <div x-cloak x-show="stale" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800" role="status">
+        <span class="font-medium">Sơ đồ bàn vừa thay đổi.</span>
+        <button type="button" x-on:click="applyNow()" class="h-8 rounded-lg bg-amber-600 px-3 font-semibold text-white hover:bg-amber-700">Tải lại</button>
+    </div>
+
     <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
             <h1 class="text-[32px] leading-tight font-bold tracking-tight">Sơ đồ bàn</h1>
-            <p class="mt-1 text-stone-600">{{ $tableCount }} bàn · {{ $totalSeats }} chỗ ngồi</p>
+            <p class="mt-1 text-stone-600" data-live-refresh="summary">{{ $tableCount }} bàn · {{ $totalSeats }} chỗ ngồi</p>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -21,6 +28,7 @@
         </div>
     </div>
 
+    <div data-live-refresh="plan">
     @if ($tableCount === 0)
         <div class="mt-6 flex flex-col items-center rounded-xl border border-dashed border-stone-300 bg-white px-6 py-16 text-center">
             <span class="flex size-12 items-center justify-center rounded-xl bg-cream/70 text-latte-dark"><x-icon name="armchair" class="size-6" /></span>
@@ -116,4 +124,6 @@
             </section>
         @endforeach
     @endif
+    </div>
+    </div>
 </x-layouts.app>

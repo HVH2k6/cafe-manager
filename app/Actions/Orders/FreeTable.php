@@ -22,8 +22,9 @@ class FreeTable
             ->whereKeyNot($order->id)
             ->exists();
 
+        // Through the model (not a query update) so DiningTableObserver broadcasts it to the floor plan.
         if (! $tableStillInUse) {
-            $order->diningTable()->update(['status' => $status]);
+            $order->diningTable?->update(['status' => $status]);
         }
     }
 }

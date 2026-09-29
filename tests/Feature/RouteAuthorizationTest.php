@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
  */
 test('every authenticated route checks a permission', function () {
     /** Routes any logged-in user may open, whatever their role. */
-    $openToAllStaff = ['dashboard', 'logout'];
+    $openToAllStaff = ['dashboard', 'logout', 'sidebar-badges'];
 
     $unprotected = collect(Route::getRoutes()->getRoutes())
         ->filter(fn (RoutingRoute $route): bool => in_array('auth', $route->gatherMiddleware(), true))
